@@ -25,17 +25,18 @@ import datetime
 import functools
 import math
 import os
-import re
 import pickle
+import re
 import sys
 import time
 from typing import Optional
 
+import brotli
 import requests
 from requests_cache import CacheMixin
 
+from fastf1.version  import __version__
 from fastf1.logger import get_logger
-
 
 _logger = get_logger(__name__)
 
@@ -69,6 +70,7 @@ class _MinIntervalLimitDelay:
     Sleeps for the remaining amount of time if the last request was more recent
     than allowed by the minimum interval rule.
     """
+
     def __init__(self, interval: float):
         self._interval: float = interval
         self._t_last: float = 0.0
@@ -87,6 +89,7 @@ class _CallsPerIntervalLimitRaise:
     If the maximum number of allowed requests within this interval is exceeded,
     a :class:`RateLimitExceeded` exception is raised.
     """
+
     def __init__(self, calls: int, interval: float, info: str):
         self._interval: float = interval
         self._timestamps = collections.deque(maxlen=calls)
@@ -128,6 +131,7 @@ class _CachedSessionWithRateLimiting(CacheMixin, _SessionWithRateLimiting):
     """Equivalent of ``requests_cache.CachedSession```but using
     :class:`_SessionWithRateLimiting` as base instead of ``requests.Session``.
     """
+
     pass
 
 
@@ -234,9 +238,15 @@ class Cache:
         # Allow users to use paths such as ~user or ~/
         cache_dir = os.path.expanduser(cache_dir)
 
+
         if not os.path.exists(cache_dir):
             raise NotADirectoryError("Cache directory does not exist! Please "
                                      "check for typos or create it first.")
+
+        # Setup a subdirectory based on version and create it
+        cache_dir = f'{cache_dir}{os.sep}{__version__}'
+        os.makedirs(cache_dir, exist_ok=True)
+
         cls._CACHE_DIR = cache_dir
         cls._IGNORE_VERSION = ignore_version
         cls._FORCE_RENEW = force_renew
@@ -359,7 +369,7 @@ class Cache:
 
         for dirpath, dirnames, filenames in os.walk(cache_dir):
             for filename in filenames:
-                if filename.endswith('.ff1pkl'):
+                if filename.endswith('.br'):
                     os.remove(os.path.join(dirpath, filename))
 
         if deep:
@@ -393,7 +403,13 @@ class Cache:
 
                     # file exists already, try to load it
                     try:
-                        cached = pickle.load(open(cache_file_path, 'rb'))
+                        # cached = pickle.load(open(cache_file_path, 'rb'))
+                        t1 = time.time()
+                        cached = pickle.loads(
+                            brotli.decompress(open(cache_file_path, "rb").read())
+                        )
+                        t2 = time.time()
+                        print(f"[READ]: {cache_file_path} Took {t2 - t1} seconds")
                     except:  # noqa: E722 (bare except)
                         # don't like the bare exception clause but who knows
                         # which dependency will raise which internal exception
@@ -452,7 +468,7 @@ class Cache:
             # create subfolders if they don't yet exist
             os.makedirs(cache_dir_path)
 
-        file_name = name + '.ff1pkl'
+        file_name = name + '.br'
         cache_file_path = os.path.join(cache_dir_path, file_name)
         return cache_file_path
 
@@ -469,12 +485,13 @@ class Cache:
 
     @classmethod
     def _write_cache(cls, data, cache_file_path, **kwargs):
-        new_cached = dict(
-            **{'version': cls._API_CORE_VERSION, 'data': data},
-            **kwargs
-        )
-        with open(cache_file_path, 'wb') as cache_file_obj:
-            pickle.dump(new_cached, cache_file_obj)
+        new_cached = dict(**{"version": cls._API_CORE_VERSION, "data": data}, **kwargs)
+        with open(cache_file_path, "wb") as cache_file_obj:
+            # pickle.dump(new_cached, cache_file_obj)
+            t1 = time.time()
+            cache_file_obj.write(brotli.compress(pickle.dumps(new_cached)))
+            t2 = time.time()
+            print(f"[WRITE]: {cache_file_path} Took {t2 - t1} seconds")
 
     @classmethod
     def get_default_cache_path(cls):
@@ -650,4 +667,6 @@ class _NoCacheContext:
 # TODO: document
 class RateLimitExceededError(Exception):
     """Raised if a hard rate limit is exceeded."""
+
+    pass
     pass

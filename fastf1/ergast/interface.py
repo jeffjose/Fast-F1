@@ -10,7 +10,7 @@ from fastf1.version import __version__
 import pandas as pd
 
 
-BASE_URL = 'https://ergast.com/api/f1'
+BASE_URL = 'http://ergast.com/api/f1'
 HEADERS = {'User-Agent': f'FastF1/{__version__}'}
 
 
