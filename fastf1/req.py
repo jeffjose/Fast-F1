@@ -25,16 +25,15 @@ import datetime
 import functools
 import math
 import os
-import re
 import pickle
+import re
 import sys
 import time
 
+import brotli
 import requests
-from requests_cache import CacheMixin
-
 from fastf1.logger import get_logger
-
+from requests_cache import CacheMixin
 
 _logger = get_logger(__name__)
 
@@ -68,6 +67,7 @@ class _MinIntervalLimitDelay:
     Sleeps for the remaining amount of time if the last request was more recent
     than allowed by the minimum interval rule.
     """
+
     def __init__(self, interval: float):
         self._interval: float = interval
         self._t_last: float = 0.0
@@ -86,6 +86,7 @@ class _CallsPerIntervalLimitRaise:
     If the maximum number of allowed requests within this interval is exceeded,
     a :class:`RateLimitExceeded` exception is raised.
     """
+
     def __init__(self, calls: int, interval: float, info: str):
         self._interval: float = interval
         self._timestamps = collections.deque(maxlen=calls)
@@ -127,6 +128,7 @@ class _CachedSessionWithRateLimiting(CacheMixin, _SessionWithRateLimiting):
     """Equivalent of ``requests_cache.CachedSession```but using
     :class:`_SessionWithRateLimiting` as base instead of ``requests.Session``.
     """
+
     pass
 
 
@@ -313,7 +315,7 @@ class Cache:
 
         for dirpath, dirnames, filenames in os.walk(cache_dir):
             for filename in filenames:
-                if filename.endswith('.ff1pkl'):
+                if filename.endswith('.br'):
                     os.remove(os.path.join(dirpath, filename))
 
         if deep:
@@ -342,7 +344,11 @@ class Cache:
                 if os.path.isfile(cache_file_path):
                     # file exists already, try to load it
                     try:
-                        cached = pickle.load(open(cache_file_path, 'rb'))
+                        # cached = pickle.load(open(cache_file_path, 'rb'))
+                        print(f"[READ] {cache_file_path}")
+                        cached = pickle.loads(
+                            brotli.decompress(open(cache_file_path, "rb").read())
+                        )
                     except:  # noqa: E722 (bare except)
                         # don't like the bare exception clause but who knows
                         # which dependency will raise which internal exception
@@ -401,7 +407,7 @@ class Cache:
             # create subfolders if they don't yet exist
             os.makedirs(cache_dir_path)
 
-        file_name = name + '.ff1pkl'
+        file_name = name + '.br'
         cache_file_path = os.path.join(cache_dir_path, file_name)
         return cache_file_path
 
@@ -418,12 +424,11 @@ class Cache:
 
     @classmethod
     def _write_cache(cls, data, cache_file_path, **kwargs):
-        new_cached = dict(
-            **{'version': cls._API_CORE_VERSION, 'data': data},
-            **kwargs
-        )
-        with open(cache_file_path, 'wb') as cache_file_obj:
-            pickle.dump(new_cached, cache_file_obj)
+        new_cached = dict(**{"version": cls._API_CORE_VERSION, "data": data}, **kwargs)
+        with open(cache_file_path, "wb") as cache_file_obj:
+            # pickle.dump(new_cached, cache_file_obj)
+            print(f"[WRITE] {cache_file_path}")
+            cache_file_obj.write(brotli.compress(pickle.dumps(new_cached)))
 
     @classmethod
     def get_default_cache_path(cls):
@@ -563,4 +568,6 @@ class _NoCacheContext:
 # TODO: document
 class RateLimitExceededError(Exception):
     """Raised if a hard rate limit is exceeded."""
+
+    pass
     pass
