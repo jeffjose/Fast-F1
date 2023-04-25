@@ -33,8 +33,9 @@ from typing import Optional
 
 import brotli
 import requests
-from fastf1.logger import get_logger
 from requests_cache import CacheMixin
+
+from fastf1.logger import get_logger
 
 _logger = get_logger(__name__)
 
@@ -357,10 +358,12 @@ class Cache:
                     # file exists already, try to load it
                     try:
                         # cached = pickle.load(open(cache_file_path, 'rb'))
-                        print(f"[READ] {cache_file_path}")
+                        t1 = time.time()
                         cached = pickle.loads(
                             brotli.decompress(open(cache_file_path, "rb").read())
                         )
+                        t2 = time.time()
+                        print(f"[READ]: {cache_file_path} Took {t2 - t1} seconds")
                     except:  # noqa: E722 (bare except)
                         # don't like the bare exception clause but who knows
                         # which dependency will raise which internal exception
@@ -439,8 +442,10 @@ class Cache:
         new_cached = dict(**{"version": cls._API_CORE_VERSION, "data": data}, **kwargs)
         with open(cache_file_path, "wb") as cache_file_obj:
             # pickle.dump(new_cached, cache_file_obj)
-            print(f"[WRITE] {cache_file_path}")
+            t1 = time.time()
             cache_file_obj.write(brotli.compress(pickle.dumps(new_cached)))
+            t2 = time.time()
+            print(f"[WRITE]: {cache_file_path} Took {t2 - t1} seconds")
 
     @classmethod
     def get_default_cache_path(cls):
